@@ -2,20 +2,24 @@ import boto3
 from cryptography.fernet import Fernet
 import os
 from dotenv import load_dotenv
-# ==========================================
+# ====================================================
 load_dotenv("keys.env")
+
 AWS_ACCESS_KEY = os.environ.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
-if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
-    raise ValueError("Missing AWS credentials! Check your keys.env file.")
-# ===================== CONFIG =======================
-BUCKET_NAME = ""
-REGION = ""
-# Change this to the exact key of the file you want to download
-S3_KEY = "backups/2026-04-09_02-03-00/wallpaperflare.com_wallpaper.jpg"
-# ====================================================
+BUCKET_NAME    = os.environ.get("BUCKET_NAME")
+REGION         = os.environ.get("REGION")
+S3_KEY         = os.environ.get("S3_KEY")
 
-OUTPUT_FILENAME = os.path.basename(S3_KEY) if S3_KEY else "decrypted_output"
+if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
+    raise ValueError("❌ Missing AWS credentials! Check your keys.env file.")
+
+if not BUCKET_NAME or not REGION:
+    raise ValueError("❌ Missing BUCKET_NAME or REGION in keys.env file!")
+
+if not S3_KEY:
+    raise ValueError("❌ Missing S3_KEY in keys.env file!")
+# ====================================================
 
 s3 = boto3.client(
     's3',
@@ -30,23 +34,23 @@ with open("encryption_key.key", "rb") as f:
 cipher = Fernet(key)
 
 def download_and_decrypt():
-    if not S3_KEY:
-        print("❌ Please set S3_KEY in the CONFIG section.")
-        return
-
     try:
-        print(f"Downloading encrypted file: {S3_KEY}")
-        response       = s3.get_object(Bucket=BUCKET_NAME, Key=S3_KEY)
+        print(f"📥 Downloading encrypted file: {S3_KEY}")
+        
+        response = s3.get_object(Bucket=BUCKET_NAME, Key=S3_KEY)
         encrypted_data = response['Body'].read()
 
         decrypted_data = cipher.decrypt(encrypted_data)
 
+        OUTPUT_FILENAME = os.path.basename(S3_KEY)
+
         with open(OUTPUT_FILENAME, "wb") as f:
             f.write(decrypted_data)
 
-        print(f"✅ Decrypted and saved as: {OUTPUT_FILENAME}")
+        print(f"✅ Successfully decrypted and saved as: {OUTPUT_FILENAME}")
 
     except Exception as e:
-        print(f"❌ Failed to decrypt: {e}")
+        print(f"❌ Failed to decrypt file: {e}")
 
-download_and_decrypt()
+if __name__ == "__main__":
+    download_and_decrypt()
