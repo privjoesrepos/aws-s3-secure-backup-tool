@@ -1,121 +1,112 @@
-# aws-s3-secure-backup-tool
+# AWS S3 Secure Backup Tool
 
-Secure automated backup tool that encrypts files locally before uploading to AWS S3.
-
-# Secure S3 Backup Tool
-
-A Python-based automated backup tool that securely encrypts files before uploading them to AWS S3.
-This tool demonstrates cloud automation, security best practices, and Python scripting skills.
+Secure automated backup tool that **encrypts files locally** before uploading to AWS S3.
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![boto3](https://img.shields.io/badge/boto3-FF9900?style=for-the-badge&logo=amazon&logoColor=white)
 
+A robust Python backup solution that encrypts files using **AES-256-GCM** before uploading them to AWS S3. Designed for security, performance, and ease of restoration.
+
+---
+
+## What's New in v2
+
+- **True streaming AES-256-GCM encryption** — Low memory usage even for large files
+- **Parallel uploads & downloads** — Configurable concurrency with `ThreadPoolExecutor`
+- **Smart retry logic** — Automatic retries with exponential backoff on transient failures
+- **Manifest-based restore** — Full folder restore using `MANIFEST.json`
+- **Path traversal protection** — Safe restoration even from untrusted manifests
+- **Clean progress reporting** — Improved console output with `tqdm`
+
+---
+
 ## Features
 
-- **End-to-end encryption** — Files are encrypted locally using Fernet (symmetric encryption) before upload. Plaintext data never touches S3.
-- **Automated backups** — Walks through folders and subfolders recursively
-- **Timestamped backups** — Each backup gets its own dated folder in S3
-- **Presigned URLs** — Generates a temporary secure download link per file (configurable expiration, default 1 hour)
-- **Per-file error handling** — Failed uploads are caught individually; a summary is printed at the end
-- **Decryption script** — Separate tool to download and decrypt files locally
+- **End-to-end encryption** — Files are encrypted locally with AES-256-GCM (authenticated encryption). Plaintext never touches S3.
+- **Streaming processing** — Low memory footprint; suitable for large files and folders.
+- **Timestamped backups** — Each run creates a unique folder: `backups/YYYY-MM-DD_HH-MM-SS/`
+- **Manifest file** — `MANIFEST.json` contains metadata, presigned URLs, and original sizes.
+- **Parallel operations** — Fast backup and restore with configurable worker count.
+- **Retry resilience** — Handles transient S3/network errors gracefully.
+- **Two restore modes** — Full folder restore by timestamp or single file decrypt.
+
+---
 
 ## Technologies Used
 
 - Python 3
-- boto3 (AWS SDK for Python)
-- cryptography.fernet (symmetric encryption)
-- python-dotenv (environment-based configuration)
+- boto3 (AWS SDK)
+- cryptography (AES-256-GCM via `hazmat`)
+- python-dotenv
+- tqdm (progress bars)
 - AWS S3
-- IAM (for secure access)
 
-## Project Structure
-
-```
-aws-s3-secure-backup-tool/
-├── back0p.py           # Main backup script
-├── decrypt.py          # Download and decrypt a file from S3
-├── keys.env            # Your credentials and config (never commit this)
-├── encryption_key.key  # Auto-generated on first run (never commit this)
-└── .gitignore          # Should exclude keys.env and encryption_key.key
-```
+---
 
 ## Setup
 
 ### 1. Install dependencies
 
 ```bash
-pip install boto3 cryptography python-dotenv
+pip3 install boto3 cryptography python-dotenv tqdm
 ```
 
 ### 2. Configure `keys.env`
 
-All configuration is done through a `keys.env` file in the project root. Never commit this file.
+Copy `keys.env.example` to `keys.env` and fill in your details.
 
-```env
-# === AWS Credentials (required) ===
-AWS_ACCESS_KEY_ID=your_access_key_here
-AWS_SECRET_ACCESS_KEY=your_secret_key_here
+### 3. First Run
 
-# === AWS S3 Settings ===
-BUCKET_NAME=your-bucket-name
-REGION=your-region
+The first time you run the backup script, it will automatically generate `encryption_key.key`. Keep this file safe — it is required to decrypt your backups.
 
-# === Local Backup Settings ===
-# On Mac/Linux: ~/Documents/MyFolder
-# On Windows:   C:\Users\YourName\MyFolder
-FOLDER_TO_BACKUP=~/Documents/your-folder
-
-# === Presigned URL Expiration ===
-# How long the download link stays valid (in seconds), 3600 = 1 hour
-SHARE_EXPIRATION=3600
-
-# === Decrypt script settings ===
-# Set this before running decrypt.py
-S3_KEY=backups/YYYY-MM-DD_HH-MM-SS/yourfile.ext
-```
-
-### 3. Add a `.gitignore`
-
-Make sure your repo includes a `.gitignore` to avoid accidentally committing secrets:
-
-```
-keys.env
-encryption_key.key
-*.key
-.env
-```
+---
 
 ## How to Use
 
-### Run a Backup
+### 1. Run a Backup
 
 ```bash
 python3 backup.py
 ```
 
-The script will:
-- Encrypt every file in the configured folder using Fernet encryption
-- Upload only the encrypted files to AWS S3 under a timestamped prefix (`backups/YYYY-MM-DD_HH-MM-SS/`)
-- Generate and print a presigned download URL for each file
-- Print a summary of succeeded and failed uploads
+### 2. Restore an Entire Backup
 
-> **Sharing files:** To share a backup file, send the presigned URL along with the `encryption_key.key` file through a separate secure channel. The recipient can then use `decrypt.py` to decrypt it.
-
-### Decrypt a File
-
-1. Set `S3_KEY` in `keys.env` to the path of the file you want to decrypt (e.g. `backups/2026-04-09_21-27-35/photo.jpg`)
-2. Run:
+Set `RESTORE_TIMESTAMP` in `keys.env`, then run:
 
 ```bash
-python3 decrypt.py
+python3 decrypt_restore.py
 ```
 
-The script will download the encrypted file from S3, decrypt it using your local `encryption_key.key`, and save it with its original filename in the current directory.
+### 3. Decrypt a Single File
+
+Uncomment and set `S3_KEY` in `keys.env`, then run:
+
+```bash
+python3 decrypt_restore.py
+```
+
+---
 
 ## Security Notes
 
-- **Plaintext data never leaves your machine** — only encrypted files are uploaded to S3
-- **Credentials are loaded from `keys.env`** — never hardcoded in source files
-- **The encryption key (`encryption_key.key`) is generated automatically** on first run and reused on subsequent runs. Keep it safe — without it, your backups cannot be decrypted
-- It is recommended to use an IAM user with least-privilege permissions (S3 read/write on your bucket only)
+- Plaintext data never leaves your machine — only encrypted files are uploaded to S3.
+- AES-256-GCM provides both confidentiality and integrity.
+- Keep `encryption_key.key` safe — losing it means your backups become permanently unrecoverable.
+- Use an IAM user with least-privilege permissions (S3 access only).
+
+---
+
+## Changelog
+
+### v2.0.0 (Current)
+
+- Upgraded from Fernet to AES-256-GCM streaming encryption
+- Added true low-memory streaming for backup and restore
+- Parallel processing with thread-safe progress bars
+- Added `MANIFEST.json`, retry logic, and path traversal protection
+- Improved console output and error handling
+
+### v1.0.0
+
+- Initial Fernet-based implementation
